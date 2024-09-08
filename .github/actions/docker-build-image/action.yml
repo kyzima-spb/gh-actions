@@ -1,0 +1,160 @@
+inputs:
+  build-args:
+    description: "List of build-time variables"
+    required: false
+  cache:
+    description: "The type, image, and tag used for caching"
+    required: false
+  context:
+    description: "Build's context is the set of files located in the specified PATH or URL"
+    required: false
+  dockerhub-username:
+    description: "Username used to log against the Docker registry"
+    required: false
+  dockerhub-password:
+    description: "Password or personal access token used to log against the Docker registry"
+    required: false
+  file:
+    description: "Path to the Dockerfile"
+    required: false
+  flavor:
+    description: "Flavors to apply"
+    required: false
+  github-token:
+    description: "Password or personal access token used to log against the Github account"
+    required: false
+  images:
+    description: "List of Docker images to use as base name for tags"
+    required: false
+    default: "ghcr"
+  platforms:
+    description: "List of target platforms for build"
+    required: false
+  push:
+    description: "Push is a shorthand for --output=type=registry"
+    required: false
+    type: boolean
+    default: true
+  tags:
+    description: "List of tags as key-value pair attributes"
+    required: false
+  target:
+    description: "Sets the target stage to build"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    -
+      if: inputs.dockerhub-username && inputs.dockerhub-password
+      name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-username }}
+        password: ${{ inputs.dockerhub-password }}
+    -
+      if: inputs.github-token
+      name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+    -
+      name: Set GHCR_IMAGE environment variable
+      shell: bash
+      run: echo "GHCR_IMAGE=ghcr.io/${GITHUB_REPOSITORY/docker-/}" >> $GITHUB_ENV
+    -
+      name: Docker cache
+      uses: actions/github-script@v7
+      id: cache-arg
+      env:
+        INPUT_CACHE: ${{ inputs.cache }}
+        INPUT_GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+      with:
+        script: |
+          const ghcrImage = core.getInput('ghcr_image');
+          const cache = core.getMultilineInput('cache');
+
+          cache.map(i => {
+            const params = Object.assign(
+              {
+                type: 'registry',
+                repo: ghcrImage,
+                version: 'buildcache',
+              },
+              Object.fromEntries(
+                i.split(',').map(o => o.split('='))
+              )
+            );
+            const name = params.arg?.replace(/^cache-/, '');
+            const value = params.type === 'gha'
+              ? `type=gha,scope=${params.repo}:${params.version}`
+              : `type=registry,ref=${params.repo}:${params.version}`;
+            
+            if (name && name.length) {
+              core.info(`${name}: ${value}`);
+              core.setOutput(name, value);
+            } else {
+              core.setFailed(`Require set "arg" option for ${i}.`);
+            }
+          });
+    -
+      if: inputs.platforms
+      name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: ${{ inputs.platforms }}
+    -
+      name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    -
+      name: Replace images placeholders
+      uses: actions/github-script@v7
+      id: images
+      env:
+        INPUT_IMAGES: ${{ inputs.images }}
+        INPUT_GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+      with:
+        result-encoding: string
+        script: |
+          const images = core.getMultilineInput('images');
+          const ghcrImage = core.getInput('ghcr_image');
+          return images.map(i => i.replace(/^ghcr$/, ghcrImage))
+                       .join('\n');
+    -
+      name: Docker meta
+      uses: docker/metadata-action@v5
+      id: meta
+      with:
+        images: ${{ steps.images.outputs.result }}
+        tags: ${{ inputs.tags }}
+        flavor: ${{ inputs.flavor }}
+    -
+      name: Build and push
+      uses: docker/build-push-action@v6
+      env:
+        CACHE_FROM: ${{ steps.cache-arg.outputs.from || steps.cache-arg.outputs.default }}
+        CACHE_TO: ${{ steps.cache-arg.outputs.to || steps.cache-arg.outputs.default }} 
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        build-args: ${{ inputs.build-args }}
+        target: ${{ inputs.target }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
+        platforms: ${{ inputs.platforms }}
+        cache-from: ${{ env.CACHE_FROM }}
+        cache-to: ${{ env.CACHE_TO }}${{ env.CACHE_TO && ',mode=max' }}
+        load: ${{ !fromJSON(inputs.push) }}
+        push: ${{ inputs.push }}
+        provenance: ${{ inputs.push }}
+        sbom: ${{ inputs.push }}
+    -
+      name: Find the primary image tag we just pushed, and output it
+      id: image-version
+      shell: bash
+      run: |
+        # shellcheck disable=SC2086
+        echo "image-version=$DOCKER_METADATA_OUTPUT_VERSION" >> $GITHUB_OUTPUT
