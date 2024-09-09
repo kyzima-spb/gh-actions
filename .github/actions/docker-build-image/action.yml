@@ -8,11 +8,14 @@ inputs:
   context:
     description: "Build's context is the set of files located in the specified PATH or URL"
     required: false
-  dockerhub-username:
-    description: "Username used to log against the Docker registry"
-    required: false
-  dockerhub-password:
+  docker-password:
     description: "Password or personal access token used to log against the Docker registry"
+    required: false
+  docker-registry:
+    description: "Server address of Docker registry. If not set then will default to Docker Hub"
+    required: false
+  docker-username:
+    description: "Username used to log against the Docker registry"
     required: false
   file:
     description: "Path to the Dockerfile"
@@ -46,12 +49,13 @@ runs:
   using: composite
   steps:
     -
-      if: inputs.dockerhub-username && inputs.dockerhub-password
+      if: inputs.docker-username && inputs.docker-password
       name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
-        username: ${{ inputs.dockerhub-username }}
-        password: ${{ inputs.dockerhub-password }}
+        registry: ${{ inputs.docker-registry }}
+        username: ${{ inputs.docker-username }}
+        password: ${{ inputs.docker-password }}
     -
       if: inputs.github-token
       name: Login to GitHub Container Registry
