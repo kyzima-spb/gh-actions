@@ -190,10 +190,3 @@ runs:
         user: ${{ github.repository_owner }}
         container: ${{ steps.prune.outputs.result }}
         prune-untagged: true
-    -
-      name: Find the primary image tag we just pushed, and output it
-      id: image-version
-      shell: bash
-      run: |
-        # shellcheck disable=SC2086
-        echo "image-version=$DOCKER_METADATA_OUTPUT_VERSION" >> $GITHUB_OUTPUT

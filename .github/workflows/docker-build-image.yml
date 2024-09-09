@@ -1,0 +1,97 @@
+on:
+  workflow_call:
+    inputs:
+      build-args:
+        description: "List of build-time variables"
+        required: false
+        type: string
+      cache:
+        description: "The type, image, and tag used for caching"
+        required: false
+        type: string
+      context:
+        description: "Build's context is the set of files located in the specified PATH or URL"
+        required: false
+        type: string
+      file:
+        description: "Path to the Dockerfile"
+        required: false
+        type: string
+      flavor:
+        description: "Flavors to apply"
+        required: false
+        type: string
+      images:
+        description: "List of Docker images to use as base name for tags"
+        required: false
+        default: "ghcr"
+        type: string
+      platforms:
+        description: "List of target platforms for build"
+        required: false
+        type: string
+      push:
+        description: "Push is a shorthand for --output=type=registry"
+        required: false
+        default: true
+        type: boolean
+      tags:
+        description: "List of tags as key-value pair attributes"
+        required: false
+        type: string
+      target:
+        description: "Sets the target stage to build"
+        required: false
+        type: string
+    
+    secrets:
+      docker-password:
+        description: "Password or personal access token used to log against the Docker registry"
+        required: false
+      docker-registry:
+        description: "Server address of Docker registry. If not set then will default to Docker Hub"
+        required: false
+      docker-username:
+        description: "Username used to log against the Docker registry"
+        required: false
+      github-token:
+        description: "Password or personal access token used to log against the Github account"
+        required: false
+    
+    outputs:
+      image-tag:
+        value: ${{ jobs.build.outputs.image-tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Build and Push image
+        uses: kyzima-spb/gh-actions/.github/actions/docker-build-image@master
+        with:
+          build-args: ${{ inputs.build-args }}
+          cache: ${{ inputs.cache }}
+          context: ${{ inputs.context }}
+          docker-password: ${{ secrets.docker-password }}
+          docker-registry: ${{ secrets.docker-registry }}
+          docker-username: ${{ secrets.docker-username }}
+          file: ${{ inputs.file }}
+          flavor: ${{ inputs.flavor }}
+          github-token: ${{ secrets.github-token }}
+          images: ${{ inputs.images }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ inputs.push }}
+          tags: ${{ inputs.tags }}
+          target: ${{ inputs.target }}
+      -
+        name: Find the primary image tag we just pushed, and output it
+        id: image
+        run: |
+          # shellcheck disable=SC2086
+          echo "tag=$DOCKER_METADATA_OUTPUT_VERSION" >> $GITHUB_OUTPUT
