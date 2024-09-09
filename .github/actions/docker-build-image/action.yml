@@ -152,6 +152,41 @@ runs:
         provenance: ${{ inputs.push }}
         sbom: ${{ inputs.push }}
     -
+      name: Search for an image for the Github registry in the images list
+      uses: actions/github-script@v7
+      id: prune
+      env:
+        INPUT_IMAGES: ${{ steps.images.outputs.result }}
+      with:
+        result-encoding: string
+        script: |
+          const containers = core.getMultilineInput('images')
+            .filter(i => i.indexOf('ghcr.io') !== -1)
+            .map(i => {
+              const [container, username, ..._] = i.split('/').reverse();
+              return container;
+            });
+          
+          if (!containers.length) {
+            core.info('No images found for Github registry.');
+          } else if (containers.length > 1) {
+            core.warning('More than one container found, only the first one will be used.');
+          } else {
+            return containers[0];
+          }
+
+          return '';
+    -
+      if: steps.prune.outputs.result
+      continue-on-error: true
+      name: Deletes all untagged image versions
+      uses: vlaurin/action-ghcr-prune@main
+      with:
+        token: ${{ inputs.github-token }}
+        user: ${{ github.repository_owner }}
+        container: ${{ steps.prune.outputs.result }}
+        prune-untagged: true
+    -
       name: Find the primary image tag we just pushed, and output it
       id: image-version
       shell: bash
