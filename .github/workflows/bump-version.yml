@@ -1,0 +1,126 @@
+on:
+  workflow_call:
+    inputs:
+      commit-message:
+        description: "The message to use when committing changes"
+        required: false
+        type: string
+        default: "Bump version from {current} to {latest}"
+      get-current-release-command:
+        required: true
+        type: string
+      get-latest-release-command:
+        required: false
+        type: string
+      lookup:
+        description: "User or organization name/Repository name"
+        required: false
+        type: string
+      patch-files-command:
+        description: "A command that makes changes to files"
+        required: true
+        type: string
+      regexp:
+        description: "Regular expression to remove extra characters from a tag name"
+        required: false
+        type: string
+      working-directory:
+        required: false
+        type: string
+        default: "."
+    
+    secrets:
+      github-token:
+        description: "Password or personal access token used to log against the Github account"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    outputs:
+      is-latest: ${{ steps.result.outputs.is-latest }}
+      current-version: ${{ steps.result.outputs.current }}
+      latest-version: ${{ steps.result.outputs.latest }}
+      release-description: ${{ steps.latest.outputs.description || steps.latest-github.outputs.description }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      - name: Check input conditions
+        run: |
+          if test -z "${{ inputs.get-latest-release-command || inputs.lookup }}"
+          then
+            echo '::error::Either "get-latest-release-command" or "lookup" must be provided.'
+            exit 1
+          fi
+      -
+        name: Get the current release
+        id: current
+        run: |
+          version="$(${{ inputs.get-current-release-command }})"
+          echo "version="$version"" >> $GITHUB_OUTPUT
+      -
+        if: inputs.get-latest-release-command
+        name: Get the latest release
+        id: latest
+        run: |
+          version="$(${{ inputs.get-latest-release-command }})"
+          echo "version="$version"" >> $GITHUB_OUTPUT
+      -
+        if: inputs.lookup
+        name: Get the latest release from the Github repository
+        uses: kyzima-spb/gh-actions/.github/actions/latest-release@master
+        id: latest-github
+        with:
+          lookup: ${{ inputs.lookup }}
+          regexp: ${{ inputs.regexp }}
+      -
+        name: Compare versions
+        id: result
+        run: |
+          current="${{ steps.current.outputs.version }}"
+          latest="${{ steps.latest.outputs.version || steps.latest-github.outputs.version }}"
+          isLatest="$(test "$current" == "$latest" && echo 'true' || echo 'false')"
+
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "latest=$latest" >> $GITHUB_OUTPUT
+          echo "is-latest=$isLatest" >> $GITHUB_OUTPUT
+
+  upgrade:
+    if: ${{ !fromJSON(needs.check.outputs.is-latest) }}
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Format commit message
+        run: |
+          message="${{ inputs.commit-message }}"
+          message="${message/\{current\}/${{ needs.check.outputs.current-version }}}"
+          message="${message/\{latest\}/${{ needs.check.outputs.latest-version }}}"
+          echo "COMMIT_MESSAGE=$message" >> $GITHUB_ENV
+      -
+        env:
+          LATEST_VERSION: ${{ needs.check.outputs.latest-version }}
+        name: Patch project files
+        run: ${{ inputs.patch-files-command }}
+      -
+        name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.github-token }}
+          branch: checker/latest-version
+          delete-branch: true
+          title: ${{ env.COMMIT_MESSAGE }}
+          commit-message: ${{ env.COMMIT_MESSAGE }}
+          labels: |
+            automated pr
+          body: ${{ needs.check.outputs.release-description }}
