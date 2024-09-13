@@ -26,6 +26,8 @@ inputs:
   github-token:
     description: "Password or personal access token used to log against the Github account"
     required: false
+  # github-username: ${{ github.repository_owner }}
+  # github-password: ${{ secrets.GITHUB_TOKEN }}
   images:
     description: "List of Docker images to use as base name for tags"
     required: false
@@ -124,7 +126,7 @@ runs:
         script: |
           const images = core.getMultilineInput('images');
           const ghcrImage = core.getInput('ghcr_image');
-          return images.map(i => i.replace(/^ghcr$/, ghcrImage))
+          return images.map(i => i.replace(/^ghcr(.+)*$/, `${ghcrImage}$1`))
                        .join('\n');
     -
       name: Docker meta
