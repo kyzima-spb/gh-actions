@@ -168,10 +168,8 @@ runs:
         script: |
           const packages = core.getMultilineInput('images', { required: true })
             .filter(i => i.indexOf('ghcr.io') !== -1)
-            .map(i => {
-              const [package, ..._] = i.split('/').reverse();
-              return package;
-            });
+            .map(i => i.split(',').shift())
+            .map(i => i.split('/').pop());
           
           if (!packages.length) {
             core.info('No images found for Github registry.');
