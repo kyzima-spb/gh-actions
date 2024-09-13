@@ -62,6 +62,9 @@ on:
       image-tag:
         value: ${{ jobs.build.outputs.image-tag }}
 
+permissions:
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
