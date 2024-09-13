@@ -166,29 +166,25 @@ runs:
       with:
         result-encoding: string
         script: |
-          const containers = core.getMultilineInput('images')
+          const packages = core.getMultilineInput('images', { required: true })
             .filter(i => i.indexOf('ghcr.io') !== -1)
             .map(i => {
-              const [container, username, ..._] = i.split('/').reverse();
-              return container;
+              const [package, ..._] = i.split('/').reverse();
+              return package;
             });
           
-          if (!containers.length) {
+          if (!packages.length) {
             core.info('No images found for Github registry.');
-          } else if (containers.length > 1) {
-            core.warning('More than one container found, only the first one will be used.');
-          } else {
-            return containers[0];
+            return '';
           }
-
-          return '';
+          
+          return packages.join(',');
     -
       if: steps.prune.outputs.result
       continue-on-error: true
       name: Deletes all untagged image versions
-      uses: vlaurin/action-ghcr-prune@main
+      uses: dataaxiom/ghcr-cleanup-action@v1
       with:
         token: ${{ inputs.github-token }}
-        user: ${{ github.repository_owner }}
-        container: ${{ steps.prune.outputs.result }}
-        prune-untagged: true
+        # owner: ${{ github.repository_owner }}
+        packages: ${{ steps.prune.outputs.result }}
