@@ -33,6 +33,16 @@ on:
       github-token:
         description: "Password or personal access token used to log against the Github account"
         required: true
+    
+    outputs:
+      current-version:
+        value: ${{ jobs.check.outputs.current-version }}
+      is-latest:
+        value: ${{ jobs.check.outputs.is-latest }}
+      latest-version:
+        value: ${{ jobs.check.outputs.latest-version }}
+      release-description:
+        value: ${{ jobs.check.outputs.release-description }}
 
 jobs:
   check:
@@ -41,8 +51,8 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     outputs:
-      is-latest: ${{ steps.result.outputs.is-latest }}
       current-version: ${{ steps.result.outputs.current }}
+      is-latest: ${{ steps.result.outputs.is-latest }}
       latest-version: ${{ steps.result.outputs.latest }}
       release-description: ${{ steps.latest.outputs.description || steps.latest-github.outputs.description }}
     steps:
