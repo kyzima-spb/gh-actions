@@ -1,0 +1,30 @@
+name: Check if the base Docker image has changed and then rebuild it
+
+on:
+  workflow_dispatch:
+    inputs:
+      base-image:
+        description: "Docker image used in the FROM instruction"
+        required: true
+      user-image:
+        description: "Docker image that needs to be checked"
+        required: true
+      platforms:
+        description: "List of platforms used in the check"
+        required: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Check
+        id: check
+        uses: kyzima-spb/docker-image-need-update-action@v1
+        with:
+          base-image: ${{ inputs.base-image }}
+          user-image: ${{ inputs.user-image }}
+          platforms: ${{ inputs.platforms }}
+      -
+        run: |
+          echo "${{ steps.check.outputs.result }}"

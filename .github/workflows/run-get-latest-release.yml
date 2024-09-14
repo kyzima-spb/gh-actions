@@ -1,0 +1,32 @@
+name: Get latest release demo example
+
+on:
+  workflow_dispatch:
+    inputs:
+      lookup:
+        description: 'Github Repository'
+        required: true
+        default: atauenis/webone
+        type: choice
+        options:
+        - atauenis/webone
+        - just-containers/s6-overlay
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Get latest release
+        uses: ./.github/actions/latest-release
+        id: release
+        with:
+          lookup: ${{ inputs.lookup }}
+      -
+        name: Print release info
+        run: |
+          echo "Version: ${{ steps.release.outputs.version }}"
+          echo "${{ steps.release.outputs.description }}"
